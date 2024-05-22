@@ -100,6 +100,42 @@ type Chunk struct {
 }
 
 // NewChunker returns a Chunker with the given Options.
+// Bring in the caller's buffer, the buffer size must be double as "opts.MaxSize"
+// with this approach, we can reduce the GC stress. 
+func NewChunkerWithBuf(rd io.Reader,buf []byte,opts Options) (*Chunker, error) {
+	opts.setDefaults()
+	if err := opts.validate(); err != nil {
+		return nil, err
+	}
+
+	for i := 0; i < len(table); i++ {
+		table[i] = table[i] ^ opts.Seed
+	}
+
+	normalization := opts.Normalization
+	if opts.DisableNormalization {
+		normalization = 0
+	}
+	bits := int(math.Round(math.Log2(float64(opts.AverageSize))))
+	smallBits := bits + normalization
+	largeBits := bits - normalization
+
+	chunker := &Chunker{
+		minSize:  opts.MinSize,
+		maxSize:  opts.MaxSize,
+		normSize: opts.AverageSize,
+		maskS:    (1 << smallBits) - 1,
+		maskL:    (1 << largeBits) - 1,
+		rd:       rd,
+		buf:     buf,
+		cursor:   opts.BufSize,
+	}
+
+	return chunker, nil
+}
+
+
+// NewChunker returns a Chunker with the given Options.
 func NewChunker(rd io.Reader, opts Options) (*Chunker, error) {
 	opts.setDefaults()
 	if err := opts.validate(); err != nil {
